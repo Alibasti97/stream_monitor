@@ -2,13 +2,19 @@ import tkinter as tk
 from tkinter import scrolledtext
 import threading
 import sys
+import time
+
+from pycaw.pycaw import AudioUtilities, IAudioMeterInformation
+from ctypes import POINTER, cast
+from comtypes import CLSCTX_ALL
+import comtypes
 
 
 class StreamMonitorDashboard:
     def __init__(self, root):
         self.root = root
         self.root.title("Stream Monitor Dashboard")
-        self.root.geometry("450x500")
+        self.root.geometry("500x550")
 
         self.monitor_thread = None
         self.stop_event = threading.Event()
@@ -25,6 +31,27 @@ class StreamMonitorDashboard:
         self.stream_url.pack(padx=10, pady=5)
         self.stream_url.insert(0, "https://cdn01khi.tamashaweb.com:8087/YlUHeDQb7a/city41News-abr/playlist.m3u8")
 
+        # --- Email Configuration ---
+        # tk.Label(root, text="Email From:").pack(anchor='w', padx=10)
+        # self.email_from = tk.Entry(root, width=80)
+        # self.email_from.pack(padx=10, pady=2)
+        # self.email_from.insert(0, "youremail@gmail.com")
+        #
+        # tk.Label(root, text="Email Password:").pack(anchor='w', padx=10)
+        # self.email_password = tk.Entry(root, show='*', width=80)
+        # self.email_password.pack(padx=10, pady=2)
+        # self.email_password.insert(0, "yourpassword")
+        #
+        # tk.Label(root, text="Recipient (To):").pack(anchor='w', padx=10)
+        # self.email_to = tk.Entry(root, width=80)
+        # self.email_to.pack(padx=10, pady=2)
+        # self.email_to.insert(0, "someone@example.com")
+        #
+        # tk.Label(root, text="CC Emails (comma separated):").pack(anchor='w', padx=10)
+        # self.email_cc = tk.Entry(root, width=80)
+        # self.email_cc.pack(padx=10, pady=2)
+        # self.email_cc.insert(0, "cc1@example.com,cc2@example.com")
+
         # --- Buttons ---
         btn_frame = tk.Frame(root)
         btn_frame.pack(pady=10)
@@ -35,12 +62,21 @@ class StreamMonitorDashboard:
         self.stop_button = tk.Button(btn_frame, text="Stop", command=self.stop_monitoring, bg='red', fg='white', width=10)
         self.stop_button.pack(side='left', padx=10)
 
+        # --- Audio Level Bar ---
+        self.audio_canvas = tk.Canvas(root, width=300, height=30, bg="black")
+        self.audio_canvas.pack(pady=15)
+        self.audio_bar = self.audio_canvas.create_rectangle(0, 0, 0, 30, fill='green')
+
         # --- Log Output ---
         tk.Label(root, text="Log Output:").pack(anchor='w', padx=10)
         self.log_area = scrolledtext.ScrolledText(root, width=85, height=20, state='disabled')
         self.log_area.pack(padx=10, pady=5)
 
         sys.stdout = TextRedirector(self.log_area, "stdout")
+
+        # --- Start audio thread ---
+        self.audio_thread = threading.Thread(target=self.update_audio_level, daemon=True)
+        self.audio_thread.start()
 
     def start_monitoring(self):
         if self.monitor_thread and self.monitor_thread.is_alive():
@@ -63,6 +99,31 @@ class StreamMonitorDashboard:
     def stop_monitoring(self):
         print("[INFO] Sending stop signal to monitoring...")
         self.stop_event.set()
+
+    def update_audio_level(self):
+        comtypes.CoInitialize()
+        devices = AudioUtilities.GetSpeakers()
+        interface = devices.Activate(IAudioMeterInformation._iid_, CLSCTX_ALL, None)
+        meter = cast(interface, POINTER(IAudioMeterInformation))
+
+        while True:
+            try:
+                volume = meter.GetPeakValue() * 100
+                bar_length = min(int(volume * 3), 300)
+
+                if volume <= 30:
+                    color = "green"
+                elif volume <= 70:
+                    color = "yellow"
+                else:
+                    color = "red"
+
+                self.audio_canvas.coords(self.audio_bar, 0, 0, bar_length, 30)
+                self.audio_canvas.itemconfig(self.audio_bar, fill=color)
+
+                time.sleep(0.1)
+            except:
+                pass
 
 
 class TextRedirector:

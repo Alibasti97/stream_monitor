@@ -8,3 +8,4 @@ pycaw~=20240210
 tensorflow~=2.19.0
 scikit-learn~=1.6.1
 scikit-image~=0.25.2
+matplotlib~=3.10.3
